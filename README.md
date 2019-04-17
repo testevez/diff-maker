@@ -43,27 +43,14 @@ restriction on the form by including or not including the option in the array.
 Honeypot includes a `docker-compose.yml` file that can be used for testing purposes. To build a Drupal 8 environment for local testing, do the following:
 
   1. Make sure you have Docker for Mac (or for whatever OS you're using) installed.
-  1. Run the following commands in this directory to start the environment and install Drush:
+  2. Add the following entry to your `/etc/hosts` file: `192.168.22.33   local.drupalhoneypot.com`
+  3. Run `docker-compose up -d` in this directory.
+  4. Install Drupal: `docker exec honeypot install-drupal` (optionally provide a version after `install-drupal`).
+  5. Link the honeypot module directory into the Drupal modules directory: `docker exec honeypot ln -s /opt/honeypot/ /var/www/drupalvm/drupal/web/modules/honeypot`
+  6. Visit `http://local.drupalhoneypot.com/user` and log in using the admin credentials Drush displayed.
 
-     ```
-     docker-compose up -d
-     docker-compose exec drupal bash -c 'composer install --dev'
-     docker-compose exec drupal bash -c 'composer require --dev drush/drush'
-     ```
+> Note: If you're using a Mac, you may also need to perform additional steps to get the hostname working; see [Managing your hosts file](http://docs.drupalvm.com/en/latest/other/docker/#managing-your-hosts-file) in the Drupal VM documentation.
 
-  1. Link the honeypot module directory into the Drupal modules directory:
-
-     ```
-     docker-compose exec drupal ln -s /opt/honeypot/ /var/www/html/modules/honeypot
-     ```
-
-  1. Install Drupal with Drush:
-
-     ```
-     docker-compose exec drupal bash -c 'vendor/bin/drush site:install standard --site-name="Honeypot Test" --account-pass admin -y && chown -R www-data:www-data sites/default/files'
-     ```
-
-  1. Log into `http://localhost/` with `admin`/`admin` and enable Honeypot (and the Testing module, if desired).
 
 ## Credit
 

@@ -23,7 +23,7 @@ function honeypot_help($route_name, RouteMatchInterface $route_match) {
       $output .= '<dt>' . t('Configuring Honeypot') . '</dt>';
       $output .= '<dd>' . t('All settings for this module are on the Honeypot configuration page, under the Configuration section, in the Content authoring settings. You can visit the configuration page directly from the Honeypot configuration link below. The configuration settings are described in the <a href=":url">online documentation for the Honeypot module</a>.', [':url' => 'https://www.drupal.org/docs/8/modules/honeypot/using-honeypot']) . '</dd>';
       $output .= '<dt>' . t('Setting up Honeypot in your own forms') . '</dt>';
-      $output .= '<dd>' . t("Honeypot protection can be bypassed for certain user roles. For instance, site administrators, who just might be able to fill out a form in less than 5 seconds.  And, Honeypot protection can be enabled only for certain forms. Or, it can protect all forms on the site. Finally, honeypot protection can be used in any of your own forms by simply including a little code snippet included on the module's project page.") . '</dd>';
+      $output .= '<dd>' . t('Honeypot protection can be bypassed for certain user roles. For instance, site administrators, who just might be able to fill out a form in less than 5 seconds.  And, Honeypot protection can be enabled only for certain forms. Or, it can protect all forms on the site. Finally, honeypot protection can be used in any of your own forms by simply including a little code snippet included on the module\'s project page.') . '</dd>';
       $output .= '</dl>';
       return $output;
   }
@@ -36,9 +36,6 @@ function honeypot_cron() {
   // Delete {honeypot_user} entries older than the value of honeypot_expire.
   $expire_limit = \Drupal::config('honeypot.settings')->get('expire');
   \Drupal::database()->delete('honeypot_user')
-    ->condition('timestamp', \Drupal::time()->getRequestTime() - $expire_limit, '<')
-    ->execute();
-  \Drupal::database()->delete('honeypot_session')
     ->condition('timestamp', \Drupal::time()->getRequestTime() - $expire_limit, '<')
     ->execute();
 }
@@ -68,7 +65,7 @@ function honeypot_form_alter(&$form, FormStateInterface $form_state, $form_id) {
     // Don't protect system forms - only admins should have access, and system
     // forms may be programmatically submitted by drush and other modules.
     if (preg_match('/[^a-zA-Z]system_/', $form_id) === 0 && preg_match('/[^a-zA-Z]search_/', $form_id) === 0 && preg_match('/[^a-zA-Z]views_exposed_form_/', $form_id) === 0) {
-      honeypot_add_form_protection($form, $form_state, ['honeypot', 'time_restriction'], $form_id);
+      honeypot_add_form_protection($form, $form_state, ['honeypot', 'time_restriction']);
     }
   }
 
@@ -77,7 +74,7 @@ function honeypot_form_alter(&$form, FormStateInterface $form_state, $form_id) {
     foreach ($forms_to_protect as $protect_form_id) {
       // For most forms, do a straight check on the form ID.
       if ($form_id == $protect_form_id) {
-        honeypot_add_form_protection($form, $form_state, ['honeypot', 'time_restriction'], $form_id);
+        honeypot_add_form_protection($form, $form_state, ['honeypot', 'time_restriction']);
       }
     }
   }
@@ -123,9 +120,8 @@ function honeypot_get_protected_forms() {
  *   Array of options to be added to form. Currently accepts 'honeypot' and
  *   'time_restriction'.
  */
-function honeypot_add_form_protection(&$form, FormStateInterface $form_state, array $options = [], $form_id = "webform") {
+function honeypot_add_form_protection(&$form, FormStateInterface $form_state, array $options = []) {
   $account = \Drupal::currentUser();
-  $advanced_validation = \Drupal::config('honeypot.settings')->get('advanced_validation');
 
   // Allow other modules to alter the protections applied to this form.
   \Drupal::moduleHandler()->alter('honeypot_form_protections', $options, $form);
@@ -144,7 +140,6 @@ function honeypot_add_form_protection(&$form, FormStateInterface $form_state, ar
     $honeypot_class = $honeypot_element . '-textfield';
     $form[$honeypot_element] = [
       '#theme_wrappers' => [
-        'form_element',
         'container' => [
           '#id' => NULL,
           '#attributes' => [
@@ -165,71 +160,6 @@ function honeypot_add_form_protection(&$form, FormStateInterface $form_state, ar
       '#element_validate' => ['_honeypot_honeypot_validate'],
     ];
 
-    if ($advanced_validation) {
-      // Disable caching to ensure a unique token is supplied each time
-      Drupal::service('page_cache_kill_switch')->trigger();
-      // Set the token field name.
-      $honeypot_element_token = $honeypot_element . '-token';
-      // Set the SID value to the form element.
-      $input = $form_state->getUserInput();
-      $sid = (!empty($input[$honeypot_element])) ? $input[$honeypot_element] : honeypot_generate_honeypot_session($form_id);
-      $form_token = (!empty($input[$honeypot_element_token])) ? $input[$honeypot_element_token] : NULL;
-      $form[$honeypot_element]['#default_value'] = $sid;
-      $form[$honeypot_element]['#element_validate'] = ['_honeypot_advanced_validate'];
-      // Create a token.
-      $honeypot_token = "";
-      if (\Drupal::currentUser()->id() == 0 && $form_token != NULL) {
-        $honeypot_token = db_select('honeypot_session', 'hs')
-          ->fields('hs', ['token'])
-          ->condition('token', $form_token)
-          ->execute()
-          ->fetchField();
-      }
-      else {
-        $honeypot_token = db_select('honeypot_session', 'hs')
-          ->fields('hs', ['token'])
-          ->condition('hsid', $sid)
-          ->execute()
-          ->fetchField();
-      }
-      if (!isset($honeypot_token) && !$form_state->isSubmitted()) {
-        // Additional one-time Honeypot token:
-        // Store in database and send with form.
-        $honeypot_token = md5(mt_rand());
-        db_update('honeypot_session')
-          ->fields(['token' => $honeypot_token])
-          ->condition('hsid', $sid)
-          ->execute();
-      }
-      // Insert token to form.
-      $form[$honeypot_element_token] = [
-        '#theme_wrappers' => [
-          'container' => [
-            '#id' => NULL,
-            '#attributes' => [
-              'style' => [
-                'display: none !important;',
-              ],
-            ],
-          ],
-        ],
-        '#type' => 'textfield',
-        '#title' => t('Leave this field blank'),
-        '#size' => 20,
-        '#weight' => 100,
-        '#attributes' => ['autocomplete' => 'off'],
-        '#default_value' => $honeypot_token,
-      ];
-      // Add custom submit handler to submittable forms.
-      if (array_key_exists('actions', $form)) {
-        foreach (array_keys($form['actions']) as $action) {
-          if ($action != 'preview' && isset($form['actions'][$action]['#type']) && $form['actions'][$action]['#type'] === 'submit') {
-            $form['#submit'][] = 'honeypot_advanced_form_submit';
-          }
-        }
-      }
-    }
-
   }
 
   // Set the time restriction for this form (if it's not disabled).
@@ -238,7 +168,7 @@ function honeypot_add_form_protection(&$form, FormStateInterface $form_state, ar
     $input = $form_state->getUserInput();
     if (empty($input['honeypot_time'])) {
       $identifier = Crypt::randomBytesBase64();
-      \Drupal::service('keyvalue.expirable')->get('honeypot_time_restriction')->setWithExpire($identifier, time(), 3600 * 24);
+      \Drupal::service('keyvalue.expirable')->get('honeypot_time_restriction')->setWithExpire($identifier, time(), 3600*24);
     }
     else {
       $identifier = $input['honeypot_time'];
@@ -283,67 +213,6 @@ function _honeypot_honeypot_validate($element, FormStateInterface $form_state) {
 }
 
 /**
- * Validate honeypot field (advanced validation).
- */
-function _honeypot_advanced_validate($element, FormStateInterface $form_state, $form) {
-  // Get the honeypot token field name.
-  $honeypot_element = \Drupal::config('honeypot.settings')->get('element_name');
-  $honeypot_element_token = $honeypot_element . '-token';
-  // Get the honeypot field value.
-  $honeypot_sid = $element['#value'];
-  // Get the honeypot token value.
-  $input = $form_state->getUserInput();
-  $honeypot_token = $input[$honeypot_element_token];
-
-  // Fetch the token for the current form.
-  $token_query = \Drupal::database()->select('honeypot_session', 'hs');
-  if (\Drupal::currentUser()->id() == 0) {
-    $token_query->condition('hs.token', $honeypot_token, '=');
-  }
-  else {
-    $token_query->condition('hs.hsid', $honeypot_sid, '=');
-  }
-  $token_query->fields('hs', ['token']);
-  $expected_honeypot_token = $token_query->execute()->fetchField();
-
-  // Make sure it's a valid token.
-  if ($expected_honeypot_token != $honeypot_token) {
-    _honeypot_log($form_state->getValue('form_id'), 'honeypot');
-    $form_state->setErrorByName('', t('There was a problem with your form submission. Please refresh the page and try again.'));
-    $honeypot_sid = NULL;
-  }
-
-}
-
-/**
- * Submit handler for honeypot advanced validation.
- */
-function honeypot_advanced_form_submit($form, FormStateInterface $form_state) {
-  $honeypot_element = \Drupal::config('honeypot.settings')->get('element_name');
-  $input = $form_state->getUserInput();
-  $honeypot_sid = $input[$honeypot_element];
-  // Invalidate Honeypot token to avoid reuse.
-  if (\Drupal::currentUser()->id() == 0) {
-    // Get the honeypot token field name.
-    $honeypot_element_token = $honeypot_element . '-token';
-    // Get the honeypot token value.
-    $honeypot_token = $input[$honeypot_element_token];
-    db_update('honeypot_session')
-      ->fields(['token' => NULL])
-      ->condition('token', $honeypot_token)
-      ->execute();
-  }
-  else {
-    db_update('honeypot_session')
-      ->fields(['token' => NULL])
-      ->condition('hsid', $honeypot_sid)
-      ->execute();
-  }
-  return TRUE;
-
-}
-
-/**
  * Validate honeypot's time restriction field.
  */
 function _honeypot_time_restriction_validate($element, FormStateInterface $form_state) {
@@ -370,7 +239,7 @@ function _honeypot_time_restriction_validate($element, FormStateInterface $form_
   if (!$honeypot_time || \Drupal::time()->getRequestTime() < ($honeypot_time + $time_limit)) {
     _honeypot_log($form_state->getValue('form_id'), 'honeypot_time');
     $time_limit = honeypot_get_time_limit();
-    \Drupal::service('keyvalue.expirable')->get('honeypot_time_restriction')->setWithExpire($identifier, \Drupal::time()->getRequestTime(), 3600 * 24);
+    \Drupal::service('keyvalue.expirable')->get('honeypot_time_restriction')->setWithExpire($identifier, \Drupal::time()->getRequestTime(), 3600*24);
     $form_state->setErrorByName('', t('There was a problem with your form submission. Please wait @limit seconds and try again.', ['@limit' => $time_limit]));
   }
 }
@@ -465,34 +334,4 @@ function honeypot_log_failure($form_id, $type) {
   // Allow other modules to react to honeypot rejections.
   // TODO - Only accepts two args.
   \Drupal::moduleHandler()->invokeAll('honeypot_reject', [$form_id, $uid, $type]);
-}
-
-/**
- * Helper function for generating a new Honeypot session.
- */
-function honeypot_generate_honeypot_session($form_id = NULL) {
-  // Insert an entry and thankfully receive the value of the.
-  // autoincrement field 'hsid' .
-  $honeypot_sid = db_insert('honeypot_session')
-    ->fields([
-      'uid' => \Drupal::currentUser()->id(),
-      'sid' => session_id(),
-      'ip_address' => Drupal::request()->getClientIp(),
-      'timestamp' => REQUEST_TIME,
-      'form_id' => $form_id,
-    ])
-    ->execute();
-  return $honeypot_sid;
-}
-
-/**
- * Helper function for updating the solution in the Honeypot session table.
- */
-function honeypot_update_honeypot_session($honeypot_sid) {
-  db_update('honeypot_session')
-    ->condition('hsid', $honeypot_sid)
-    ->fields([
-      'timestamp' => REQUEST_TIME,
-    ])
-    ->execute();
 }

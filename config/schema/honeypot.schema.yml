@@ -4,9 +4,6 @@ honeypot.settings:
     protect_all_forms:
       type: boolean
       label: 'Protect all forms'
-    advanced_validation:
-      type: boolean
-      label: 'Advanced validation'
     unprotected_forms:
       type: sequence
       label: 'Unprotected forms'

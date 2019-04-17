@@ -6,7 +6,7 @@
  */
 
 use Drupal\Core\Url;
-use Drupal\Core\Database\Database;
+use Drupal\Core\Link;
 
 /**
  * Implements hook_schema().
@@ -39,58 +39,6 @@ function honeypot_schema() {
       'timestamp' => ['timestamp'],
     ],
   ];
-  $schema['honeypot_session'] = [
-    'description' => 'Stores the data about HONEYPOT sessions ( IP address, timestamp, ...).',
-    'fields' => [
-      'hsid' => [
-        'description' => 'HONEYPOT session ID.',
-        'type' => 'serial',
-        'not null' => TRUE,
-      ],
-      'token' => [
-        'description' => 'One time HONEYPOT token.',
-        'type' => 'varchar',
-        'length' => 64,
-        'not null' => FALSE,
-      ],
-      'uid' => [
-        'description' => "User's {users}.uid.",
-        'type' => 'int',
-        'not null' => TRUE,
-        'default' => 0,
-      ],
-      'sid' => [
-        'description' => "Session ID of the user.",
-        'type' => 'varchar',
-        'length' => 128,
-        'not null' => TRUE,
-        'default' => '',
-      ],
-      'ip_address' => [
-        'description' => 'IP address of the visitor.',
-        'type' => 'varchar',
-        'length' => 128,
-        'not null' => FALSE,
-      ],
-      'timestamp' => [
-        'description' => 'A Unix timestamp indicating when the challenge was generated.',
-        'type' => 'int',
-        'not null' => TRUE,
-        'default' => 0,
-      ],
-      'form_id' => [
-        'description' => 'The form_id of the form where the HONEYPOT is added to.',
-        'type' => 'varchar',
-        'length' => 128,
-        'not null' => TRUE,
-      ],
-
-    ],
-    'primary key' => ['hsid'],
-    'indexes' => [
-      'hsid_ip' => ['hsid', 'ip_address'],
-    ],
-  ];
   return $schema;
 }
 
@@ -100,7 +48,7 @@ function honeypot_schema() {
 function honeypot_install() {
   if (PHP_SAPI !== 'cli') {
     $config_url = Url::fromUri('base://admin/config/content/honeypot');
-    \Drupal::messenger()->addMessage(t(
+    drupal_set_message(t(
       'Honeypot installed successfully. Please <a href=":url">configure Honeypot</a> to protect your forms from spam bots.',
       [':url' => $config_url->toString()]
     ));
@@ -124,13 +72,4 @@ function honeypot_update_8100() {
   $spec = $schema['honeypot_user']['fields']['hostname'];
   $spec['initial'] = '';
   \Drupal::database()->schema()->addField('honeypot_user', 'hostname', $spec);
-}
-
-/**
- * Adds the {honeypot_session} table.
- */
-function honeypot_update_8101() {
-  $definition = honeypot_schema()['honeypot_session'];
-  $schema = Database::getConnection()->schema();
-  $schema->createTable('honeypot_session', $definition);
 }
