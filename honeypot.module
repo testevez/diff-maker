@@ -166,6 +166,8 @@ function honeypot_add_form_protection(&$form, FormStateInterface $form_state, ar
     ];
 
     if ($advanced_validation) {
+      // Disable caching to ensure a unique token is supplied each time
+      Drupal::service('page_cache_kill_switch')->trigger();
       // Set the token field name.
       $honeypot_element_token = $honeypot_element . '-token';
       // Set the SID value to the form element.
